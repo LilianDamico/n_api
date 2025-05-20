@@ -35,7 +35,8 @@ public class NotaFiscalController {
             notaFiscalService.inserirNota(payload);
             return ResponseEntity.ok("Nota fiscal inserida com sucesso.");
         } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("Erro ao inserir nota fiscal: " + e.getMessage());
+            return ResponseEntity.internalServerError()
+                    .body("Erro ao inserir nota fiscal: " + e.getMessage());
         }
     }
 }
