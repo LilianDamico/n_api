@@ -10,6 +10,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/notas")
+@CrossOrigin(origins = "*")
 public class NotaFiscalController {
 
     private final NotaFiscalService notaFiscalService;
@@ -18,37 +19,43 @@ public class NotaFiscalController {
         this.notaFiscalService = notaFiscalService;
     }
 
-    // ✅ 1. Listar todas as notas
+    // POST - Criar nota
+    @PostMapping
+    public ResponseEntity<Void> criarNota(@RequestBody NotaFiscalDTO dto) {
+        notaFiscalService.salvarNota(dto);
+        return ResponseEntity.ok().build();
+    }
+
+    // GET - Buscar uma nota por ID
+    @GetMapping("/{id}")
+    public ResponseEntity<NotaFiscalDTO> buscarNota(@PathVariable String id) {
+        NotaFiscalDTO dto = notaFiscalService.buscarNotaDTO(id);
+        return dto != null ? ResponseEntity.ok(dto) : ResponseEntity.notFound().build();
+    }
+
+    // GET - Listar todas as notas
     @GetMapping("/listar")
     public ResponseEntity<List<NotaFiscalDTO>> listarTodasNotas() {
-        List<NotaFiscalDTO> notas = notaFiscalService.listarTodasNotas();
-        return ResponseEntity.ok(notas);
+        return ResponseEntity.ok(notaFiscalService.listarTodasNotas());
     }
 
-    // ✅ 2. Buscar nota por ID
-    @GetMapping("/{id}")
-    public ResponseEntity<NotaFiscalDTO> buscarNotaDTO(@PathVariable String id) {
-        NotaFiscalDTO dto = notaFiscalService.buscarNotaDTO(id);
-        if (dto == null) {
-            return ResponseEntity.notFound().build();
-        }
-        return ResponseEntity.ok(dto);
-    }
-
-    // ✅ 3. Salvar nova nota
-    @PostMapping
-    public ResponseEntity<String> salvarNota(@RequestBody NotaFiscalDTO dto) {
-        try {
-            notaFiscalService.salvarNota(dto);
-            return ResponseEntity.ok("Nota salva com sucesso.");
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body("Erro ao salvar nota: " + e.getMessage());
-        }
-    }
-
-    // ✅ 4. Estatísticas
+    // GET - Estatísticas
     @GetMapping("/estatisticas")
-    public ResponseEntity<Map<String, Object>> consultarEstatisticas() {
+    public ResponseEntity<Map<String, Object>> estatisticas() {
         return ResponseEntity.ok(notaFiscalService.consultarEstatisticas());
+    }
+
+    // PUT - Atualizar uma nota existente
+    @PutMapping("/{id}")
+    public ResponseEntity<Void> atualizarNota(@PathVariable String id, @RequestBody NotaFiscalDTO dto) {
+        notaFiscalService.atualizarNota(id, dto);
+        return ResponseEntity.ok().build();
+    }
+
+    // DELETE - Deletar uma nota
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deletarNota(@PathVariable String id) {
+        notaFiscalService.deletarNota(id);
+        return ResponseEntity.ok().build();
     }
 }

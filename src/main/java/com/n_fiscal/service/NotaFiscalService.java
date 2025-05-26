@@ -27,12 +27,10 @@ public class NotaFiscalService {
 
     public void salvarNota(NotaFiscalDTO dto) {
         Map<String, AttributeValue> item = montarItem(dto);
-
         PutItemRequest request = PutItemRequest.builder()
                 .tableName(tableName)
                 .item(item)
                 .build();
-
         dynamoDbClient.putItem(request);
     }
 
@@ -41,24 +39,26 @@ public class NotaFiscalService {
         if (item == null || item.isEmpty()) return null;
 
         NotaFiscalDTO dto = new NotaFiscalDTO();
+        dto.setNotaFiscalId(item.get("NotaFiscalId").s());
+        dto.setNomeCliente(item.get("NomeCliente").s());
+        dto.setCpfCnpj(item.get("CPF_CNPJ").s());
+        dto.setEnderecoEntrega(item.get("EnderecoEntrega").s());
+        dto.setDataCompra(item.get("DataCompra").s());
 
-        dto.setNotaFiscalId(getAttr(item, "NotaFiscalId"));
-        dto.setNomeCliente(getAttr(item, "NomeCliente"));
-        dto.setCpfCnpj(getAttr(item, "CPF_CNPJ"));
-        dto.setEnderecoEntrega(getAttr(item, "EnderecoEntrega"));
-        dto.setDataCompra(getAttr(item, "DataCompra"));
-
-        String jsonItens = getAttr(item, "Itens");
         try {
-            List<ItemNotaDTO> itens = objectMapper.readValue(jsonItens, new TypeReference<>() {});
+            List<ItemNotaDTO> itens = objectMapper.readValue(
+                    item.get("Itens").s(), new TypeReference<>() {}
+            );
             dto.setItens(itens);
 
-            double total = calcularTotal(itens);
-            double tributos = calcularTributos(total);
+            double total = itens.stream()
+                    .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
+                    .sum();
+            double tributos = total * 0.18;
 
             dto.setTotalNota(total);
             dto.setTotalTributos(tributos);
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             dto.setItens(List.of());
             dto.setTotalNota(0.0);
             dto.setTotalTributos(0.0);
@@ -74,24 +74,26 @@ public class NotaFiscalService {
         List<NotaFiscalDTO> notas = new ArrayList<>();
         for (Map<String, AttributeValue> item : items) {
             NotaFiscalDTO dto = new NotaFiscalDTO();
+            dto.setNotaFiscalId(item.get("NotaFiscalId").s());
+            dto.setNomeCliente(item.get("NomeCliente").s());
+            dto.setCpfCnpj(item.get("CPF_CNPJ").s());
+            dto.setEnderecoEntrega(item.get("EnderecoEntrega").s());
+            dto.setDataCompra(item.get("DataCompra").s());
 
-            dto.setNotaFiscalId(getAttr(item, "NotaFiscalId"));
-            dto.setNomeCliente(getAttr(item, "NomeCliente"));
-            dto.setCpfCnpj(getAttr(item, "CPF_CNPJ"));
-            dto.setEnderecoEntrega(getAttr(item, "EnderecoEntrega"));
-            dto.setDataCompra(getAttr(item, "DataCompra"));
-
-            String jsonItens = getAttr(item, "Itens");
             try {
-                List<ItemNotaDTO> itens = objectMapper.readValue(jsonItens, new TypeReference<>() {});
+                List<ItemNotaDTO> itens = objectMapper.readValue(
+                        item.get("Itens").s(), new TypeReference<>() {}
+                );
                 dto.setItens(itens);
 
-                double total = calcularTotal(itens);
-                double tributos = calcularTributos(total);
+                double total = itens.stream()
+                        .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
+                        .sum();
+                double tributos = total * 0.18;
 
                 dto.setTotalNota(total);
                 dto.setTotalTributos(tributos);
-            } catch (Exception e) {
+            } catch (JsonProcessingException e) {
                 dto.setItens(List.of());
                 dto.setTotalNota(0.0);
                 dto.setTotalTributos(0.0);
@@ -125,6 +127,32 @@ public class NotaFiscalService {
         );
     }
 
+    public void atualizarNota(String id, NotaFiscalDTO dtoAtualizada) {
+        Map<String, AttributeValue> itemExistente = buscarNotaPorId(id);
+        if (itemExistente == null || itemExistente.isEmpty()) {
+            throw new NoSuchElementException("Nota fiscal não encontrada.");
+        }
+
+        dtoAtualizada.setNotaFiscalId(id);
+        Map<String, AttributeValue> novoItem = montarItem(dtoAtualizada);
+
+        PutItemRequest request = PutItemRequest.builder()
+                .tableName(tableName)
+                .item(novoItem)
+                .build();
+
+        dynamoDbClient.putItem(request);
+    }
+
+    public void deletarNota(String id) {
+        DeleteItemRequest request = DeleteItemRequest.builder()
+                .tableName(tableName)
+                .key(Map.of("NotaFiscalId", AttributeValue.builder().s(id).build()))
+                .build();
+
+        dynamoDbClient.deleteItem(request);
+    }
+
     public Map<String, AttributeValue> buscarNotaPorId(String id) {
         GetItemRequest request = GetItemRequest.builder()
                 .tableName(tableName)
@@ -143,11 +171,13 @@ public class NotaFiscalService {
         item.put("EnderecoEntrega", AttributeValue.builder().s(dto.getEnderecoEntrega()).build());
         item.put("DataCompra", AttributeValue.builder().s(dto.getDataCompra()).build());
 
-        double total = calcularTotal(dto.getItens());
-        double tributos = calcularTributos(total);
+        double total = dto.getItens().stream()
+                .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
+                .sum();
+        double tributo = total * 0.18;
 
         item.put("TotalNota", AttributeValue.builder().s(String.format(Locale.US, "%.2f", total)).build());
-        item.put("TotalTributos", AttributeValue.builder().s(String.format(Locale.US, "%.2f", tributos)).build());
+        item.put("TotalTributos", AttributeValue.builder().s(String.format(Locale.US, "%.2f", tributo)).build());
 
         try {
             String json = objectMapper.writeValueAsString(dto.getItens());
@@ -157,22 +187,5 @@ public class NotaFiscalService {
         }
 
         return item;
-    }
-
-    // ---------- Métodos auxiliares ----------
-    private double calcularTotal(List<ItemNotaDTO> itens) {
-        return itens.stream()
-                .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
-                .sum();
-    }
-
-    private double calcularTributos(double total) {
-        return total * 0.18;
-    }
-
-    private String getAttr(Map<String, AttributeValue> item, String key) {
-        return Optional.ofNullable(item.get(key))
-                .map(AttributeValue::s)
-                .orElse("");
     }
 }
