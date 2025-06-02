@@ -19,43 +19,64 @@ public class NotaFiscalController {
         this.notaFiscalService = notaFiscalService;
     }
 
-    // POST - Criar nota
     @PostMapping
-    public ResponseEntity<Void> criarNota(@RequestBody NotaFiscalDTO dto) {
+    public ResponseEntity<String> salvarNota(@RequestBody NotaFiscalDTO dto) {
         notaFiscalService.salvarNota(dto);
-        return ResponseEntity.ok().build();
+        return ResponseEntity.ok("Nota salva com sucesso.");
     }
 
-    // GET - Buscar uma nota por ID
-    @GetMapping("/{id}")
-    public ResponseEntity<NotaFiscalDTO> buscarNota(@PathVariable String id) {
-        NotaFiscalDTO dto = notaFiscalService.buscarNotaDTO(id);
-        return dto != null ? ResponseEntity.ok(dto) : ResponseEntity.notFound().build();
-    }
-
-    // GET - Listar todas as notas
     @GetMapping("/listar")
     public ResponseEntity<List<NotaFiscalDTO>> listarTodasNotas() {
         return ResponseEntity.ok(notaFiscalService.listarTodasNotas());
     }
 
-    // GET - Estatísticas
+    @GetMapping("/{id}")
+    public ResponseEntity<NotaFiscalDTO> buscarNotaPorId(@PathVariable String id) {
+        NotaFiscalDTO nota = notaFiscalService.buscarNotaDTO(id);
+        if (nota != null) {
+            return ResponseEntity.ok(nota);
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<String> atualizarNota(@PathVariable String id, @RequestBody NotaFiscalDTO dto) {
+        boolean atualizada = notaFiscalService.atualizarNota(id, dto);
+        if (atualizada) {
+            return ResponseEntity.ok("Nota atualizada com sucesso.");
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<String> deletarNota(@PathVariable String id) {
+        boolean deletada = notaFiscalService.deletarNotaPorId(id);
+        if (deletada) {
+            return ResponseEntity.ok("Nota deletada com sucesso.");
+        } else {
+            return ResponseEntity.notFound().build();
+        }
+    }
+
     @GetMapping("/estatisticas")
-    public ResponseEntity<Map<String, Object>> estatisticas() {
+    public ResponseEntity<Map<String, Object>> consultarEstatisticas() {
         return ResponseEntity.ok(notaFiscalService.consultarEstatisticas());
     }
 
-    // PUT - Atualizar uma nota existente
-    @PutMapping("/{id}")
-    public ResponseEntity<Void> atualizarNota(@PathVariable String id, @RequestBody NotaFiscalDTO dto) {
-        notaFiscalService.atualizarNota(id, dto);
-        return ResponseEntity.ok().build();
+    @GetMapping("/vendas-produto")
+    public ResponseEntity<Integer> consultarVendasPorProdutoEmMes(
+            @RequestParam String codProduto,
+            @RequestParam String mesAno // formato: YYYY-MM
+    ) {
+        int vendas = notaFiscalService.consultarVendasProdutoPorMes(codProduto, mesAno);
+        return ResponseEntity.ok(vendas);
     }
 
-    // DELETE - Deletar uma nota
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deletarNota(@PathVariable String id) {
-        notaFiscalService.deletarNota(id);
-        return ResponseEntity.ok().build();
+    @GetMapping("/faturamento")
+    public ResponseEntity<Double> consultarFaturamentoPorMes(@RequestParam String mesAno) {
+        double total = notaFiscalService.consultarFaturamentoPorMes(mesAno);
+        return ResponseEntity.ok(total);
     }
 }

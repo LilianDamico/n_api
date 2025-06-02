@@ -34,6 +34,24 @@ public class NotaFiscalService {
         dynamoDbClient.putItem(request);
     }
 
+    public boolean atualizarNota(String id, NotaFiscalDTO dto) {
+        NotaFiscalDTO existente = buscarNotaDTO(id);
+        if (existente == null) return false;
+        dto.setNotaFiscalId(id);
+        salvarNota(dto);
+        return true;
+    }
+
+    public boolean deletarNotaPorId(String id) {
+        Map<String, AttributeValue> key = Map.of("NotaFiscalId", AttributeValue.builder().s(id).build());
+        DeleteItemRequest request = DeleteItemRequest.builder()
+                .tableName(tableName)
+                .key(key)
+                .build();
+        dynamoDbClient.deleteItem(request);
+        return true;
+    }
+
     public NotaFiscalDTO buscarNotaDTO(String id) {
         Map<String, AttributeValue> item = buscarNotaPorId(id);
         if (item == null || item.isEmpty()) return null;
@@ -46,16 +64,10 @@ public class NotaFiscalService {
         dto.setDataCompra(item.get("DataCompra").s());
 
         try {
-            List<ItemNotaDTO> itens = objectMapper.readValue(
-                    item.get("Itens").s(), new TypeReference<>() {}
-            );
+            List<ItemNotaDTO> itens = objectMapper.readValue(item.get("Itens").s(), new TypeReference<>() {});
             dto.setItens(itens);
-
-            double total = itens.stream()
-                    .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
-                    .sum();
+            double total = itens.stream().mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario()).sum();
             double tributos = total * 0.18;
-
             dto.setTotalNota(total);
             dto.setTotalTributos(tributos);
         } catch (JsonProcessingException e) {
@@ -81,16 +93,10 @@ public class NotaFiscalService {
             dto.setDataCompra(item.get("DataCompra").s());
 
             try {
-                List<ItemNotaDTO> itens = objectMapper.readValue(
-                        item.get("Itens").s(), new TypeReference<>() {}
-                );
+                List<ItemNotaDTO> itens = objectMapper.readValue(item.get("Itens").s(), new TypeReference<>() {});
                 dto.setItens(itens);
-
-                double total = itens.stream()
-                        .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
-                        .sum();
+                double total = itens.stream().mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario()).sum();
                 double tributos = total * 0.18;
-
                 dto.setTotalNota(total);
                 dto.setTotalTributos(tributos);
             } catch (JsonProcessingException e) {
@@ -107,7 +113,6 @@ public class NotaFiscalService {
 
     public Map<String, Object> consultarEstatisticas() {
         List<NotaFiscalDTO> notas = listarTodasNotas();
-
         Map<String, Long> notasPorMes = new HashMap<>();
         double totalTributos = 0;
         double faturamentoTotal = 0;
@@ -115,7 +120,6 @@ public class NotaFiscalService {
         for (NotaFiscalDTO nota : notas) {
             String mes = nota.getDataCompra().substring(0, 7); // YYYY-MM
             notasPorMes.put(mes, notasPorMes.getOrDefault(mes, 0L) + 1);
-
             faturamentoTotal += nota.getTotalNota();
             totalTributos += nota.getTotalTributos();
         }
@@ -127,61 +131,50 @@ public class NotaFiscalService {
         );
     }
 
-    public void atualizarNota(String id, NotaFiscalDTO dtoAtualizada) {
-        Map<String, AttributeValue> itemExistente = buscarNotaPorId(id);
-        if (itemExistente == null || itemExistente.isEmpty()) {
-            throw new NoSuchElementException("Nota fiscal não encontrada.");
-        }
-
-        dtoAtualizada.setNotaFiscalId(id);
-        Map<String, AttributeValue> novoItem = montarItem(dtoAtualizada);
-
-        PutItemRequest request = PutItemRequest.builder()
-                .tableName(tableName)
-                .item(novoItem)
-                .build();
-
-        dynamoDbClient.putItem(request);
+    public int consultarVendasProdutoPorMes(String codProduto, String mesAno) {
+        List<NotaFiscalDTO> notas = listarTodasNotas();
+        return notas.stream()
+                .filter(n -> n.getDataCompra().startsWith(mesAno))
+                .flatMap(n -> n.getItens().stream())
+                .filter(i -> i.getCodProduto().equalsIgnoreCase(codProduto))
+                .mapToInt(ItemNotaDTO::getQuantidade)
+                .sum();
     }
 
-    public void deletarNota(String id) {
-        DeleteItemRequest request = DeleteItemRequest.builder()
-                .tableName(tableName)
-                .key(Map.of("NotaFiscalId", AttributeValue.builder().s(id).build()))
-                .build();
-
-        dynamoDbClient.deleteItem(request);
+    public double consultarFaturamentoPorMes(String mesAno) {
+        return listarTodasNotas().stream()
+                .filter(n -> n.getDataCompra().startsWith(mesAno))
+                .mapToDouble(NotaFiscalDTO::getTotalNota)
+                .sum();
     }
 
-    public Map<String, AttributeValue> buscarNotaPorId(String id) {
+    private Map<String, AttributeValue> buscarNotaPorId(String id) {
         GetItemRequest request = GetItemRequest.builder()
                 .tableName(tableName)
                 .key(Map.of("NotaFiscalId", AttributeValue.builder().s(id).build()))
                 .build();
 
-        GetItemResponse response = dynamoDbClient.getItem(request);
-        return response.item();
+        return dynamoDbClient.getItem(request).item();
     }
 
-    public Map<String, AttributeValue> montarItem(NotaFiscalDTO dto) {
+    private Map<String, AttributeValue> montarItem(NotaFiscalDTO dto) {
         Map<String, AttributeValue> item = new HashMap<>();
-        item.put("NotaFiscalId", AttributeValue.builder().s(dto.getNotaFiscalId()).build());
-        item.put("NomeCliente", AttributeValue.builder().s(dto.getNomeCliente()).build());
-        item.put("CPF_CNPJ", AttributeValue.builder().s(dto.getCpfCnpj()).build());
-        item.put("EnderecoEntrega", AttributeValue.builder().s(dto.getEnderecoEntrega()).build());
-        item.put("DataCompra", AttributeValue.builder().s(dto.getDataCompra()).build());
+        item.put("NotaFiscalId", AttributeValue.fromS(dto.getNotaFiscalId()));
+        item.put("NomeCliente", AttributeValue.fromS(dto.getNomeCliente()));
+        item.put("CPF_CNPJ", AttributeValue.fromS(dto.getCpfCnpj()));
+        item.put("EnderecoEntrega", AttributeValue.fromS(dto.getEnderecoEntrega()));
+        item.put("DataCompra", AttributeValue.fromS(dto.getDataCompra()));
 
         double total = dto.getItens().stream()
                 .mapToDouble(i -> i.getQuantidade() * i.getPrecoUnitario())
                 .sum();
         double tributo = total * 0.18;
 
-        item.put("TotalNota", AttributeValue.builder().s(String.format(Locale.US, "%.2f", total)).build());
-        item.put("TotalTributos", AttributeValue.builder().s(String.format(Locale.US, "%.2f", tributo)).build());
+        item.put("TotalNota", AttributeValue.fromS(String.format(Locale.US, "%.2f", total)));
+        item.put("TotalTributos", AttributeValue.fromS(String.format(Locale.US, "%.2f", tributo)));
 
         try {
-            String json = objectMapper.writeValueAsString(dto.getItens());
-            item.put("Itens", AttributeValue.builder().s(json).build());
+            item.put("Itens", AttributeValue.fromS(objectMapper.writeValueAsString(dto.getItens())));
         } catch (JsonProcessingException e) {
             throw new RuntimeException("Erro ao serializar itens", e);
         }
